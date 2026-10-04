@@ -234,6 +234,17 @@ Run 3: Styled this vintage look with baggy jeans, a black cropped hoodie, and ch
   `session["selected_item"]["id"]`. I also kept the empty-search branch before
   that assignment so no item reaches the model when search returns `[]`.
 
+**Moment 3**
+
+- *What I asked for:* I asked Copilot to help trace why an impossible burger
+  query returned a crochet top instead of an empty search.
+- *What came back:* It found that the query and listing matched only on the
+  conversational filler word `"at"`.
+- *What I changed:* Based on that diagnosis, I expanded the search stop-word
+  filtering and added simple plural normalization. I then verified that the
+  burger query stopped correctly while a valid conversational query for denim
+  jackets still returned the expected item.
+
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
      Don't fill these in during unit 3.
@@ -254,17 +265,74 @@ Run 3: Styled this vintage look with baggy jeans, a black cropped hoodie, and ch
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item remains the same between tools | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The fit card contains the required listing details | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Search results respect the maximum price | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
 **Real output from one try**, pasted as text, naming the file and function
 that produced it:
 
+Source: `results/run_2026-10-04_0039_before.md`. Each try was produced by
+`run_eval.py::run_once` and written to the report by
+`run_eval.py::write_report`.
+
+**Criterion 1 — matching query completes**
+
+```text
+Try 1
+- stopped early: no
+- selected_item: Vintage Band Tee — Faded Grey ($19.0, depop)
+- search_results: 10
+
+Fit card:
+Leaning into total 90s grunge streetwear today by pairing my Vintage Band Tee
+— Faded Grey with baggy dark blue jeans and a worn-in black denim jacket. I
+anchored the relaxed, utilitarian vibe with chunky combat boots and my go-to
+crossbody bag. Grabbed this piece for $19.00 on depop and it's already a heavy
+rotation staple.
 ```
 
+**Criterion 2 — impossible query stops early**
+
+```text
+Try 1
+- stopped early: yes — I couldn't find a listing matching those filters. Try
+  broader item words, remove or change the size, or raise the maximum price.
+- selected_item: (none)
+- search_results: 0
+- selected_item_id: (none)
+- suggest_outfit_input_id: (none)
+- search_result_prices: []
+```
+
+**Criterion 3 — selected item stays consistent**
+
+```text
+Try 1
+- selected_item: Denim Jacket — Light Wash, Cropped ($42.0, poshmark)
+- selected_item_id: lst_007
+- suggest_outfit_input_id: lst_007
+```
+
+**Criterion 4 — fit card contains required details**
+
+```text
+Try 1
+Rock this Vintage Band Tee — Faded Grey with dark baggy jeans and combat boots
+for an effortless 90s grunge streetwear vibe. Layering a black denim jacket
+over the tee adds great tonal contrast while anchoring the whole look. Grab
+this piece for $19.00 on depop before it's gone!
+```
+
+**Criterion 5 — search results respect maximum price**
+
+```text
+Try 1
+- selected_item: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+- search_results: 4
+- search_result_prices: [18.0, 19.0, 15.0, 20.0]
 ```
 
 ---
@@ -289,15 +357,17 @@ that produced it:
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | A matching query completes all three tools | 4 of 5 | MET (5/5) | All 5 of 5 tries completed without stopping early and returned a fit card, exceeding the target of 4 of 5. |
+| 2 | An impossible query stops before the second tool | 5 of 5 | MET (5/5) | All 5 of 5 impossible-query tries stopped after the empty search, before `suggest_outfit`, and returned guidance about changing the filters, meeting the 5-of-5 target. |
+| 3 | The selected item remains the same between tools | 5 of 5 | MET (5/5) | All 5 of 5 tries had matching `selected_item_id` and `suggest_outfit_input_id` values, meeting the 5-of-5 target. |
+| 4 | The fit card contains the required listing details | 5 of 5 | MET (5/5) | All 5 of 5 fit cards included the exact title, `$19.00` price, and `depop`, and each was two to four sentences long, meeting the 5-of-5 target. |
+| 5 | Search results respect the maximum price | 5 of 5 | MET (5/5) | In all 5 of 5 tries, every search-result price was at or below the `$20.00` maximum; the highest observed price was exactly `$20.00`, meeting the 5-of-5 target. |
 
 **Diagnoses**
 
-
+No criteria were missed. Criteria 2–5 used strict 5-of-5 targets. I would keep
+Criterion 1 at 4 of 5 because it depends on two model calls, so one transient
+model or service failure should not outweigh otherwise reliable loop behavior.
 
 ---
 
@@ -316,13 +386,31 @@ that produced it:
 **Happy path**
 
 ```
-
+[1] parse_query
+      in:  vintage graphic tee under $30
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  {'description': 'vintage graphic tee', 'size': None, 'max_price': 30.0}
+      out: 10 items: Vintage Band Tee — Faded Grey, Graphic Tee — 2003 Tour Bootleg Style, Y2K Baby Tee — Butterfly Print … +7 more
+      →    branch: results found, selecting the first item
+[3] suggest_outfit
+      in:  new_item='Vintage Band Tee — Faded Grey', wardrobe_items=10
+      out: **Outfit 1: 90s Grunge Streetwear** *   **New Item:** Vintage Band Tee (Faded Grey) *   **Bottoms:** Baggy str…
+[4] create_fit_card
+      in:  outfit='**Outfit 1: 90s Grunge Streetwear**\n*   **New Item:** Vintage Band Tee (Faded Grey)\n*   **Bottoms:**…
+      out: I'm living for this effortless 90s grunge streetwear vibe, anchored by the Vintage Band Tee — Faded Grey layer…
 ```
 
 **Empty search**
 
 ```
-
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
+      out: [] (empty)
+      →    branch: empty result, stopping
 ```
 
 **On the MCP move:** <!-- what changed in your code, and whether anything
@@ -330,6 +418,22 @@ behaved differently afterwards. If the rewire didn't work, say exactly where it
 broke — the error text and the last thing that worked. That earns the point in
 full. -->
 
+I registered `search_listings` in `mcp_server.py` and replaced the direct call
+in `agent.py::run_agent` with `mcp_client.call_tool`. The return value remained
+a `list[dict]`, so selection and branching behaved the same after the move.
+
+**Failure-mode checks**
+
+- **Empty search:** The agent said, “I couldn't find a listing matching those
+  filters. Try broader item words, remove or change the size, or raise the
+  maximum price.” It stopped with zero model calls.
+- **Empty wardrobe:** The agent returned two general ways to style the selected
+  denim jacket and created a non-empty fit card. The trace showed
+  `wardrobe_items=0`; it did not crash or return an empty string.
+- **Model unavailable:** With caching disabled and a temporary invalid API key,
+  the agent said, “The model couldn't be reached, so I couldn't finish the
+  request. The model rejected your API key. Check your connection or API key,
+  then try again.” The real `.env` file was not changed.
 
 
 ---
@@ -341,21 +445,35 @@ full. -->
 
      `python run_eval.py --label after` -->
 
-**What I changed:**
+**What I changed:** In `tools.py::create_fit_card`, I added three prompt
+requirements preventing the model from claiming the user owns, purchased, or
+wore the item or inventing scarcity, and telling it to frame the listing as
+something the user could buy and style.
 
-**Which failure it was meant to fix:**
+**Which failure it was meant to fix:** The before run met the original
+criteria, but manual review found that some fit cards invented ownership or
+purchase history and used fake scarcity language, a quality issue the original
+criteria did not measure.
 
 ### Run Log — After
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item remains the same between tools | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The fit card contains the required listing details | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Search results respect the maximum price | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Did it help, and how do I know:**
+Source: `results/run_2026-10-04_0116_after.md`.
+
+**Did it help, and how do I know:** Yes. Ownership or purchase claims fell
+from 6 of 25 fit cards in the before run to 0 of 25 after the prompt change.
+Explicit fake-scarcity phrases such as “before it’s gone” fell from 6 of 25 to
+0 of 25. All five original acceptance criteria remained MET (5/5), so the
+change improved the model output without breaking existing behavior. Three
+after-run cards still used the generic purchase verb “grab,” but none claimed
+that availability was limited.
 
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
@@ -370,7 +488,11 @@ full. -->
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
 
-
+No criteria remain missed. However, 3 of the 25 after-run fit cards still use
+the promotional word "grab." Next, I would update the fit-card prompt to prefer
+neutral recommendation wording instead of direct purchase commands. I stopped
+here because Milestone 5 required one isolated change, and making another prompt
+change would make the before-and-after result harder to attribute.
 
 <!-- ═════════════════════════════════════════════════════════════════════
 

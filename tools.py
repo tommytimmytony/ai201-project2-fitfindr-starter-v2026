@@ -31,23 +31,59 @@ _SEARCH_STOP_WORDS = {
     "a",
     "an",
     "and",
+    "at",
+    "can",
+    "carry",
+    "could",
+    "did",
+    "do",
+    "does",
     "for",
+    "from",
+    "get",
+    "has",
+    "have",
+    "how",
     "i",
     "in",
     "looking",
     "me",
     "of",
     "please",
+    "sell",
+    "selling",
+    "shop",
+    "show",
+    "stock",
+    "store",
     "the",
+    "to",
     "want",
+    "what",
+    "when",
+    "where",
+    "why",
     "with",
+    "you",
+    "your",
 }
+
+
+def _normalize_word(word: str) -> str:
+    """Normalize common English plurals so jackets matches jacket."""
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 4 and word.endswith(("sses", "shes", "ches", "xes", "zes")):
+        return word[:-2]
+    if len(word) > 3 and word.endswith("s") and not word.endswith(("ss", "is", "us")):
+        return word[:-1]
+    return word
 
 
 def _words(value: str) -> set[str]:
     """Return lowercase search tokens without punctuation or filler words."""
     return {
-        word
+        _normalize_word(word)
         for word in re.findall(r"[a-z0-9]+", value.lower())
         if word not in _SEARCH_STOP_WORDS
     }
@@ -285,7 +321,10 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         f'- Include the exact platform name: "{platform}".\n'
         "- Mention the outfit's specific styling and overall vibe.\n"
         "- Sound natural rather than like a product listing.\n"
-        "- Do not add a heading or bullet points.\n\n"
+        "- Do not add a heading or bullet points.\n"
+        "- Do not claim the user owns, purchased, or has worn the item.\n"
+        "- Do not invent scarcity or urgency.\n"
+        "- Describe it as an item the user could buy and style.\n\n"
         f"OUTFIT SUGGESTION\n{outfit}"
     )
 
