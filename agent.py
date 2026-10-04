@@ -17,7 +17,8 @@ import re
 
 import config
 import trace
-from tools import search_listings, suggest_outfit, create_fit_card
+from mcp_client import call_tool
+from tools import suggest_outfit, create_fit_card
 from generate import ModelUnavailable
 
 
@@ -126,53 +127,101 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     next_step = "parse_query"
     iteration_count = 0
 
-    while next_step is not None:
-        iteration_count += 1
-        trace.check_iterations(iteration_count)
+    try:
+        while next_step is not None:
+            iteration_count += 1
+            trace.check_iterations(iteration_count)
 
-        if next_step == "parse_query":
-            session["parsed"] = _parse_query(session["query"])
-            next_step = "search_listings"
-            continue
-
-        if next_step == "search_listings":
-            parsed = session["parsed"]
-            session["search_results"] = search_listings(
-                description=parsed["description"],
-                size=parsed["size"],
-                max_price=parsed["max_price"],
-            )
-
-            if not session["search_results"]:
-                session["error"] = (
-                    "I couldn't find a listing matching those filters. Try "
-                    "broader item words, remove or change the size, or raise "
-                    "the maximum price."
+            if next_step == "parse_query":
+                session["parsed"] = _parse_query(session["query"])
+                trace.step(
+                    "parse_query",
+                    inputs=session["query"],
+                    returned=session["parsed"],
                 )
-                return session
+                next_step = "search_listings"
+                continue
 
-            session["selected_item"] = session["search_results"][0]
-            next_step = "suggest_outfit"
-            continue
+            if next_step == "search_listings":
+                parsed = session["parsed"]
+                search_inputs = {
+                    "description": parsed["description"],
+                    "size": parsed["size"],
+                    "max_price": parsed["max_price"],
+                }
+                session["search_results"] = call_tool(
+                    "search_listings",
+                    search_inputs,
+                )
 
-        if next_step == "suggest_outfit":
-            session["suggest_outfit_input"] = session["selected_item"]
-            session["outfit_suggestion"] = suggest_outfit(
-                session["suggest_outfit_input"],
-                session["wardrobe"],
-            )
-            next_step = "create_fit_card"
-            continue
+                if not session["search_results"]:
+                    trace.step(
+                        "search_listings (via MCP)",
+                        inputs=str(search_inputs),
+                        returned=session["search_results"],
+                        note="branch: empty result, stopping",
+                    )
+                    session["error"] = (
+                        "I couldn't find a listing matching those filters. Try "
+                        "broader item words, remove or change the size, or raise "
+                        "the maximum price."
+                    )
+                    return session
 
-        if next_step == "create_fit_card":
-            session["fit_card"] = create_fit_card(
-                session["outfit_suggestion"],
-                session["selected_item"],
-            )
-            next_step = None
-            continue
+                trace.step(
+                    "search_listings (via MCP)",
+                    inputs=str(search_inputs),
+                    returned=session["search_results"],
+                    note="branch: results found, selecting the first item",
+                )
+                session["selected_item"] = session["search_results"][0]
+                next_step = "suggest_outfit"
+                continue
 
-        raise RuntimeError(f"Unknown planning step: {next_step}")
+            if next_step == "suggest_outfit":
+                session["suggest_outfit_input"] = session["selected_item"]
+                session["outfit_suggestion"] = suggest_outfit(
+                    session["suggest_outfit_input"],
+                    session["wardrobe"],
+                )
+                trace.step(
+                    "suggest_outfit",
+                    inputs=(
+                        f"new_item={session['suggest_outfit_input']['title']!r}, "
+                        f"wardrobe_items={len(session['wardrobe'].get('items', []))}"
+                    ),
+                    returned=session["outfit_suggestion"],
+                )
+                next_step = "create_fit_card"
+                continue
+
+            if next_step == "create_fit_card":
+                session["fit_card"] = create_fit_card(
+                    session["outfit_suggestion"],
+                    session["selected_item"],
+                )
+                trace.step(
+                    "create_fit_card",
+                    inputs=(
+                        f"outfit={session['outfit_suggestion']!r}, "
+                        f"new_item={session['selected_item']['title']!r}"
+                    ),
+                    returned=session["fit_card"],
+                )
+                next_step = None
+                continue
+
+            raise RuntimeError(f"Unknown planning step: {next_step}")
+    except ModelUnavailable as exc:
+        trace.step(
+            f"{next_step} failed",
+            returned=str(exc),
+            note="model unavailable, stopping",
+        )
+        session["error"] = (
+            f"The model couldn't be reached, so I couldn't finish the request. "
+            f"{exc} Check your connection or API key, then try again."
+        )
 
     return session
 

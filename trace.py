@@ -29,13 +29,15 @@ import config
 
 _lines: list[str] = []
 _step_number = 0
+_active = False
 
 
 def start_trace() -> None:
     """Clear the trace. Call this at the start of each run."""
-    global _step_number
+    global _step_number, _active
     _lines.clear()
     _step_number = 0
+    _active = True
 
 
 def step(name: str, inputs=None, returned=None, note: str = "") -> None:
@@ -49,6 +51,9 @@ def step(name: str, inputs=None, returned=None, note: str = "") -> None:
                   list of listings is fine.
         note:     an optional word on why, e.g. "branch: empty, stopping".
     """
+    if not _active:
+        return
+
     global _step_number
     _step_number += 1
 
