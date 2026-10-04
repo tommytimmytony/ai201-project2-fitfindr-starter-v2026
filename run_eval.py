@@ -185,12 +185,17 @@ def write_report(rows, args):
                 continue
 
             session = record["session"] or {}
+            forwarded_item = session.get("suggest_outfit_input") or {}
+            prices = [result["price"] for result in session.get("search_results") or []]
             item = session.get("selected_item") or {}
             lines += [
                 f"- stopped early: {'yes — ' + str(session.get('error')) if session.get('error') else 'no'}",
                 f"- selected_item: {item.get('title', '(none)')}"
                 + (f" (${item.get('price')}, {item.get('platform')})" if item else ""),
                 f"- search_results: {len(session.get('search_results') or [])}",
+                f"- selected_item_id: {item.get('id', '(none)')}",
+                f"- suggest_outfit_input_id: {forwarded_item.get('id', '(none)')}",
+                f"- search_result_prices: {prices}",
                 "",
             ]
             if session.get("outfit_suggestion"):
